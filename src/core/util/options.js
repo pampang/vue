@@ -22,10 +22,27 @@ import {
 } from 'shared/util'
 
 /**
+ * FIXME: 这里面的很多代码，都是为了兼容 Vue.extends 而设置的。
+ * 一个 Vue.extends 的例子：
+const Parent = Vue.extend({
+  created: function () {
+    console.log('parentVal')
+  }
+})
+
+const Child = new Parent({
+  created: function () {
+    console.log('childVal')
+  }
+})
+ */
+
+/**
  * Option overwriting strategies are functions that handle
  * how to merge a parent option value and a child option
  * value into the final value.
  */
+// strats 是 strategies 的缩写
 const strats = config.optionMergeStrategies
 
 /**
@@ -33,6 +50,7 @@ const strats = config.optionMergeStrategies
  */
 if (process.env.NODE_ENV !== 'production') {
   strats.el = strats.propsData = function (parent, child, vm, key) {
+    // 先判断是否传递了 vm 这个参数，我们知道当没有 vm 参数时，说明处理的是子组件的选项（这个结论不必深究，先记住即可。）
     if (!vm) {
       warn(
         `option "${key}" can only be used during instance ` +
@@ -81,8 +99,11 @@ export function mergeDataOrFn (
   childVal: any,
   vm?: Component
 ): ?Function {
+  // 主要为 Vue.extends 做处理兼容。
   if (!vm) {
     // in a Vue.extend merge, both should be functions
+    // 如果没有子选项则使用父选项，没有父选项就直接使用子选项，且这两个选项都能保证是函数，如果父子选项同时存在，则代码继续进行
+    // 主要是为了兼容 Vue.extends 这个 API。
     if (!childVal) {
       return parentVal
     }
@@ -100,6 +121,7 @@ export function mergeDataOrFn (
         typeof parentVal === 'function' ? parentVal.call(this, this) : parentVal
       )
     }
+  // 常规情况。
   } else {
     return function mergedInstanceDataFn () {
       // instance merge
@@ -118,11 +140,13 @@ export function mergeDataOrFn (
   }
 }
 
+// data 选项最终被处理为一个函数。我们可以从 vm.$options 中看到这个结果。
 strats.data = function (
-  parentVal: any,
-  childVal: any,
-  vm?: Component
+  parentVal: any, // 父组件的 data 属性
+  childVal: any, // 子组件的 data 属性
+  vm?: Component // vm 实例
 ): ?Function {
+  // 先判断是否传递了 vm 这个参数，我们知道当没有 vm 参数时，说明处理的是子组件的选项（这个结论不必深究，先记住即可。）
   if (!vm) {
     if (childVal && typeof childVal !== 'function') {
       process.env.NODE_ENV !== 'production' && warn(
@@ -143,6 +167,8 @@ strats.data = function (
 /**
  * Hooks and props are merged as arrays.
  */
+// 把在父组件和子组件上的生命周期函数合并在一块。
+// 所谓的合并，主要是为了解决 Vue.extends
 function mergeHook (
   parentVal: ?Array<Function>,
   childVal: ?Function | ?Array<Function>
@@ -150,7 +176,7 @@ function mergeHook (
   const res = childVal
     ? parentVal
       ? parentVal.concat(childVal)
-      : Array.isArray(childVal)
+      : Array.isArray(childVal) // 生命周期钩子是可以写成数组的，只是文档上没有这样写。
         ? childVal
         : [childVal]
     : parentVal
@@ -169,6 +195,7 @@ function dedupeHooks (hooks) {
   return res
 }
 
+// 在 strats 策略对象上添加用来合并各个生命周期钩子选项的策略函数，并且这些生命周期钩子选项的策略函数相同：都是 mergeHook 函数。
 LIFECYCLE_HOOKS.forEach(hook => {
   strats[hook] = mergeHook
 })
@@ -195,6 +222,7 @@ function mergeAssets (
   }
 }
 
+// 在 Vue 中 directives、filters 以及 components 被认为是资源，其实很好理解，指令、过滤器和组件都是可以作为第三方应用来提供的，比如你需要一个模拟滚动的组件，你当然可以选用超级强大的第三方组件 scroll-flip-page，所以这样看来 scroll-flip-page 就可以认为是资源，除了组件之外指令和过滤器也都是同样的道理。
 ASSET_TYPES.forEach(function (type) {
   strats[type + 's'] = mergeAssets
 })
@@ -222,6 +250,7 @@ strats.watch = function (
   if (!parentVal) return childVal
   const ret = {}
   extend(ret, parentVal)
+  // 检测子选项中的值是否也在父选项中，如果在的话将父子选项合并到一个数组，否则直接把子选项变成一个数组返回。
   for (const key in childVal) {
     let parent = ret[key]
     const child = childVal[key]
@@ -283,6 +312,7 @@ export function validateComponentName (name: string) {
       'should conform to valid custom element name in html5 specification.'
     )
   }
+  // 是否内置标签（slot、component）或保留标签
   if (isBuiltInTag(name) || config.isReservedTag(name)) {
     warn(
       'Do not use built-in or reserved HTML elements as component ' +
@@ -300,21 +330,23 @@ function normalizeProps (options: Object, vm: ?Component) {
   if (!props) return
   const res = {}
   let i, val, name
+  // 对字符串数组的处理。形如 props: ['a', 'b']
   if (Array.isArray(props)) {
     i = props.length
     while (i--) {
       val = props[i]
       if (typeof val === 'string') {
-        name = camelize(val)
+        name = camelize(val) // 将中横线转驼峰
         res[name] = { type: null }
       } else if (process.env.NODE_ENV !== 'production') {
         warn('props must be strings when using array syntax.')
       }
     }
+  // 对对象语法的 props 做处理。props: { someData: { type: Number, default: 0 } }
   } else if (isPlainObject(props)) {
     for (const key in props) {
       val = props[key]
-      name = camelize(key)
+      name = camelize(key) // 将中横线转驼峰
       res[name] = isPlainObject(val)
         ? val
         : { type: val }
@@ -391,32 +423,33 @@ export function mergeOptions (
   vm?: Component
 ): Object {
   if (process.env.NODE_ENV !== 'production') {
-    checkComponents(child)
+    checkComponents(child) // 检查组件。目前只有检查组件名字，但通过这样的形式实现了对修改封闭。后续如果需要加检查方法，不是在这里加，而是在 checkComponents 添加。
   }
 
   if (typeof child === 'function') {
     child = child.options
   }
 
-  normalizeProps(child, vm)
-  normalizeInject(child, vm)
-  normalizeDirectives(child)
+  normalizeProps(child, vm) // 把用字符串数组、对象语法表示的 props 处理好
+  normalizeInject(child, vm) // 规范化 inject 字段。
+  normalizeDirectives(child) // 规范化 derectives 字段（局部指令）
 
   // Apply extends and mixins on the child options,
   // but only if it is a raw options object that isn't
   // the result of another mergeOptions call.
   // Only merged options has the _base property.
   if (!child._base) {
-    if (child.extends) {
+    if (child.extends) { // 处理 extends 字段（允许声明扩展另一个组件）
       parent = mergeOptions(parent, child.extends, vm)
     }
-    if (child.mixins) {
+    if (child.mixins) { // 处理 mixins
       for (let i = 0, l = child.mixins.length; i < l; i++) {
         parent = mergeOptions(parent, child.mixins[i], vm)
       }
     }
   }
 
+  // 将 options 规范化后，开始正式合并。
   const options = {}
   let key
   for (key in parent) {
@@ -428,6 +461,7 @@ export function mergeOptions (
     }
   }
   function mergeField (key) {
+    // 在 starts[key] 里面存放了对各种属性的处理方法，例如 data/computed/watch 等
     const strat = strats[key] || defaultStrat
     options[key] = strat(parent[key], child[key], vm, key)
   }

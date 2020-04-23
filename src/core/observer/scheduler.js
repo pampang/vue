@@ -163,10 +163,13 @@ function callActivatedHooks (queue) {
  */
 export function queueWatcher (watcher: Watcher) {
   const id = watcher.id
+  // 避免将相同的观察者重复入队
   if (has[id] == null) {
     has[id] = true
     if (!flushing) {
       queue.push(watcher)
+    // 当变量 flushing 为真时，说明队列正在执行更新，这时如果有观察者入队则会执行 else 分支中的代码
+    // 这段代码的作用是为了保证观察者的执行顺序
     } else {
       // if already flushing, splice the watcher based on its id
       // if already past its id, it will be run next immediately.
@@ -177,6 +180,7 @@ export function queueWatcher (watcher: Watcher) {
       queue.splice(i + 1, 0, watcher)
     }
     // queue the flush
+    // waiting 变量保证了 setTimeout 语句只会执行一次
     if (!waiting) {
       waiting = true
 
@@ -184,7 +188,7 @@ export function queueWatcher (watcher: Watcher) {
         flushSchedulerQueue()
         return
       }
-      nextTick(flushSchedulerQueue)
+      nextTick(flushSchedulerQueue) // 最好的理解，就是把 nextTick 当做是 setTimeout(fn, 0)
     }
   }
 }

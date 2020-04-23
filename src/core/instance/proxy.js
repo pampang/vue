@@ -37,6 +37,7 @@ if (process.env.NODE_ENV !== 'production') {
   const hasProxy =
     typeof Proxy !== 'undefined' && isNative(Proxy)
 
+  // 对事件修饰符做代理
   if (hasProxy) {
     const isBuiltInModifier = makeMap('stop,prevent,self,ctrl,shift,alt,meta,exact')
     config.keyCodes = new Proxy(config.keyCodes, {
@@ -52,6 +53,7 @@ if (process.env.NODE_ENV !== 'production') {
     })
   }
 
+  // 利用 proxy 对 options 设定一个提取时的监听。如果发现所需要提取的值并不存在，则 warnNonPresent（友好的提示该值并不存在）
   const hasHandler = {
     has (target, key) {
       const has = key in target

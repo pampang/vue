@@ -34,7 +34,10 @@ export function initLifecycle (vm: Component) {
 
   // locate first non-abstract parent
   let parent = options.parent
+  // 如果有父组件，而且不是抽象组件（如 keep-alive）
+  // 我们要弄懂两个逻辑：父组件是在哪里设定的？（是在初始化的时候保持着引用的）；抽象组件是什么意思？（即不进行渲染逻辑的组件）
   if (parent && !options.abstract) {
+    // 使用 while 循环查找第一个非抽象的父组件
     while (parent.$options.abstract && parent.$parent) {
       parent = parent.$parent
     }
@@ -55,6 +58,7 @@ export function initLifecycle (vm: Component) {
   vm._isBeingDestroyed = false
 }
 
+// TODO: 这是在什么时候执行的呢？
 export function lifecycleMixin (Vue: Class<Component>) {
   Vue.prototype._update = function (vnode: VNode, hydrating?: boolean) {
     const vm: Component = this
@@ -144,6 +148,8 @@ export function mountComponent (
   hydrating?: boolean
 ): Component {
   vm.$el = el
+  // 如果没有 render 函数，则生成一个空白的 VNode，并且在非生产环境下报警。
+  // 生产环境下，我们应该提前将 template 编译成为 render 函数存放起来。
   if (!vm.$options.render) {
     vm.$options.render = createEmptyVNode
     if (process.env.NODE_ENV !== 'production') {
@@ -166,6 +172,8 @@ export function mountComponent (
   }
   callHook(vm, 'beforeMount')
 
+  // 定义并初始化 updateComponent 函数
+  // 根据不同的环境，对 updateComponent 方法做不同的封装。在非生产环境下，做性能分析
   let updateComponent
   /* istanbul ignore if */
   if (process.env.NODE_ENV !== 'production' && config.performance && mark) {
@@ -186,7 +194,10 @@ export function mountComponent (
       measure(`vue ${name} patch`, startTag, endTag)
     }
   } else {
+    // 目前我们可以简单地认为 updateComponent 函数的作用就是：把渲染函数生成的虚拟DOM渲染成真正的DOM
     updateComponent = () => {
+      // vm._render 函数的作用是调用 vm.$options.render 函数并返回生成的虚拟节点(vnode)
+      // vm._update 函数的作用是把 vm._render 函数生成的虚拟节点渲染成真正的 DOM
       vm._update(vm._render(), hydrating)
     }
   }
@@ -194,6 +205,9 @@ export function mountComponent (
   // we set this to vm._watcher inside the watcher's constructor
   // since the watcher's initial patch may call $forceUpdate (e.g. inside child
   // component's mounted hook), which relies on vm._watcher being already defined
+  // 渲染函数的观察者
+  // Watcher 观察者实例将对 updateComponent 函数求值，我们知道 updateComponent 函数的执行会间接触发渲染函数(vm.$options.render)的执行，而渲染函数的执行则会触发数据属性的 get 拦截器函数，从而将依赖(观察者)收集，当数据变化时将重新执行 updateComponent 函数，这就完成了重新渲染
+  // 这里新创建了一个 watcher，放在 vm 的依赖收集筐成眠。它是负责做组件更新的，当组件的数据变更时，会执行 updateComponent。
   new Watcher(vm, updateComponent, noop, {
     before () {
       if (vm._isMounted && !vm._isDestroyed) {
@@ -261,6 +275,7 @@ export function updateChildComponent (
   vm.$listeners = listeners || emptyObject
 
   // update props
+  // 更新 props 属性
   if (propsData && vm.$options.props) {
     toggleObserving(false)
     const props = vm._props

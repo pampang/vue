@@ -25,23 +25,25 @@ export function validateProp (
   vm?: Component
 ): any {
   const prop = propOptions[key]
-  const absent = !hasOwn(propsData, key)
+  const absent = !hasOwn(propsData, key) // 对应的 prop 在 propsData 上是否有数据
   let value = propsData[key]
   // boolean casting
-  const booleanIndex = getTypeIndex(Boolean, prop.type)
+  const booleanIndex = getTypeIndex(Boolean, prop.type) // 开发者写定的 type 字段中，有没有 Boolean。
+  // 对 prop 的类型为布尔值时的特殊处理，为其设置合理的布尔值
   if (booleanIndex > -1) {
     if (absent && !hasOwn(prop, 'default')) {
       value = false
-    } else if (value === '' || value === hyphenate(key)) {
+    } else if (value === '' || value === hyphenate(key)) { // 外界向组件传递的 prop 要么是一个空字符串，要么就是一个名字由驼峰转连字符后与值为相同字符串的 prop
       // only cast empty string / same name to boolean if
       // boolean has higher priority
       const stringIndex = getTypeIndex(String, prop.type)
-      if (stringIndex < 0 || booleanIndex < stringIndex) {
+      if (stringIndex < 0 || booleanIndex < stringIndex) { // 检测 String 和 Boolean 这两个类型谁定义在前面。如果 Boolean 在前，则先返回 true。
         value = true
       }
     }
   }
   // check default value
+  // 获取默认值
   if (value === undefined) {
     value = getPropDefaultValue(vm, prop, key)
     // since the default value is a fresh copy,
@@ -56,6 +58,8 @@ export function validateProp (
     // skip validation for weex recycle-list child component props
     !(__WEEX__ && isObject(value) && ('@binding' in value))
   ) {
+    // 真正的校验工作是由 assertProp 函数完成的
+    // 只有在非生产环境下，才会进行 props 的真正校验
     assertProp(prop, key, value, vm, absent)
   }
   return value
@@ -72,6 +76,7 @@ function getPropDefaultValue (vm: ?Component, prop: PropOptions, key: string): a
   const def = prop.default
   // warn against non-factory defaults for Object & Array
   if (process.env.NODE_ENV !== 'production' && isObject(def)) {
+    // default 如果是对象或数组，需要用工厂函数包装，防止多个组件实例共享一份数据所造成的问题
     warn(
       'Invalid default value for prop "' + key + '": ' +
       'Props with type Object/Array must use a factory function ' +
@@ -81,6 +86,8 @@ function getPropDefaultValue (vm: ?Component, prop: PropOptions, key: string): a
   }
   // the raw prop value was also undefined from previous render,
   // return previous default value to avoid unnecessary watcher trigger
+  // 为组件更新时准备的判断条件，避免触发无意义的响应
+  // 判断 props 到底有没有改变过。如果没有，则把之前的默认值再丢回去。
   if (vm && vm.$options.propsData &&
     vm.$options.propsData[key] === undefined &&
     vm._props[key] !== undefined
@@ -121,6 +128,8 @@ function assertProp (
     if (!Array.isArray(type)) {
       type = [type]
     }
+
+    // 这里有个有意思的地方：终止条件是放在 for 循环的判断里面的。
     for (let i = 0; i < type.length && !valid; i++) {
       const assertedType = assertType(value, type[i])
       expectedTypes.push(assertedType.expectedType || '')
@@ -147,7 +156,7 @@ function assertProp (
 }
 
 const simpleCheckRE = /^(String|Number|Boolean|Function|Symbol)$/
-
+// 检查传入值是否符合预期并返回一个对象形式的检查结果供其他函数使用
 function assertType (value: any, type: Function): {
   valid: boolean;
   expectedType: string;
@@ -188,6 +197,7 @@ function isSameType (a, b) {
   return getType(a) === getType(b)
 }
 
+// 查找第一个参数所指定的类型构造函数是否存在于第二个参数所指定的类型构造函数数组中
 function getTypeIndex (type, expectedTypes): number {
   if (!Array.isArray(expectedTypes)) {
     return isSameType(expectedTypes, type) ? 0 : -1

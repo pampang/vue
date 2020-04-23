@@ -74,6 +74,7 @@ if (typeof Promise !== 'undefined' && isNative(Promise)) {
   // Fallback to setImmediate.
   // Technically it leverages the (macro) task queue,
   // but it is still a better choice than setTimeout.
+  // 为什么首选 setImmediate 呢？这是有原因的，因为 setImmediate 拥有比 setTimeout 更好的性能，这个问题很好理解，setTimeout 在将回调注册为 (macro)task 之前要不停的做超时检测，而 setImmediate 则不需要，这就是优先选用 setImmediate 的原因
   timerFunc = () => {
     setImmediate(flushCallbacks)
   }

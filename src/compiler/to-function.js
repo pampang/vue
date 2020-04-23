@@ -18,6 +18,13 @@ function createFunction (code, errors) {
   }
 }
 
+/**
+ * 具体作用：
+1、缓存编译结果，通过 createCompileToFunctionFn 函数内声明的 cache 常量实现。
+2、调用 compile 函数将模板字符串转成渲染函数字符串
+3、调用 createFunction 函数将渲染函数字符串转成真正的渲染函数
+4、打印编译错误，包括：模板字符串 -> 渲染函数字符串 以及 渲染函数字符串 -> 渲染函数 这两个阶段的错误
+ */
 export function createCompileToFunctionFn (compile: Function): Function {
   const cache = Object.create(null)
 
@@ -26,6 +33,8 @@ export function createCompileToFunctionFn (compile: Function): Function {
     options?: CompilerOptions,
     vm?: Component
   ): CompiledFunctionResult {
+
+    // 处理一下选项参数 options 并定义 warn 常量
     options = extend({}, options)
     const warn = options.warn || baseWarn
     delete options.warn
@@ -49,6 +58,7 @@ export function createCompileToFunctionFn (compile: Function): Function {
     }
 
     // check cache
+    // 如果命中字符串模板的缓存，则直接返回该缓存，防止重复编译，提升性能
     const key = options.delimiters
       ? String(options.delimiters) + template
       : template
@@ -57,10 +67,14 @@ export function createCompileToFunctionFn (compile: Function): Function {
     }
 
     // compile
+    // compile 是通过闭包引用了来自 createCompileToFunctionFn 函数的形参，本体存放在 create-compiler.js 中
+    // 真正的编译工作是依托于 compile 函数
+    // compile 函数编译模板字符串后所得到的是字符串形式的函数体
     const compiled = compile(template, options)
 
     // check compilation errors/tips
     if (process.env.NODE_ENV !== 'production') {
+      // 如果编译时有报错
       if (compiled.errors && compiled.errors.length) {
         if (options.outputSourceRange) {
           compiled.errors.forEach(e => {
@@ -78,6 +92,7 @@ export function createCompileToFunctionFn (compile: Function): Function {
           )
         }
       }
+      // 如果编译时有提示
       if (compiled.tips && compiled.tips.length) {
         if (options.outputSourceRange) {
           compiled.tips.forEach(e => tip(e.msg, vm))
@@ -90,7 +105,9 @@ export function createCompileToFunctionFn (compile: Function): Function {
     // turn code into functions
     const res = {}
     const fnGenErrors = []
+    // 把 render 字符串包装成函数
     res.render = createFunction(compiled.render, fnGenErrors)
+    // 主要作用是渲染优化
     res.staticRenderFns = compiled.staticRenderFns.map(code => {
       return createFunction(code, fnGenErrors)
     })
@@ -109,6 +126,7 @@ export function createCompileToFunctionFn (compile: Function): Function {
       }
     }
 
+    // 返回结果的同时将结果缓存
     return (cache[key] = res)
   }
 }

@@ -26,9 +26,28 @@ Vue.config.isReservedAttr = isReservedAttr
 Vue.config.getTagNamespace = getTagNamespace
 Vue.config.isUnknownElement = isUnknownElement
 
-// install platform runtime directives & components
+// 拓展平台相关的指令、组件
+// 注入了 model、show
 extend(Vue.options.directives, platformDirectives)
+// 本来在创建 options 时就带有了 keep-alive。后面加上了 Transition, TransitionGroup
 extend(Vue.options.components, platformComponents)
+
+/**
+ * 最终的 Vue.options 的样子：
+Vue.options = {
+	components: {
+		KeepAlive,
+		Transition,
+		TransitionGroup
+	},
+	directives: {
+		model,
+		show
+	},
+	filters: Object.create(null),
+	_base: Vue
+}
+ */
 
 // install platform patch function
 Vue.prototype.__patch__ = inBrowser ? patch : noop

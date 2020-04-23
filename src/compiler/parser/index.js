@@ -76,6 +76,8 @@ export function createASTElement (
 /**
  * Convert HTML string to AST.
  */
+// parse 函数内部主要通过调用 parseHTML 函数对模板字符串进行解析
+// parseHTML 函数的作用就是用来做词法分析的，parse 函数的作用则是在词法分析的基础上做句法分析从而生成一棵 AST
 export function parse (
   template: string,
   options: CompilerOptions
@@ -201,6 +203,8 @@ export function parse (
     }
   }
 
+  // 用来做词法分析
+  // FIXME: 注意，这个 parseHTML 是没有返回值的！why？？
   parseHTML(template, {
     warn,
     expectHTML: options.expectHTML,
