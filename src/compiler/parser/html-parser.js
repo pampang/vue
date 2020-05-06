@@ -91,8 +91,10 @@ export function parseHTML (html, options) {
     // / 确保即将 parse 的内容不是在纯文本标签里 (script,style,textarea)
     if (!lastTag || !isPlainTextElement(lastTag)) {
       let textEnd = html.indexOf('<')
+      // 如果存在 <
       if (textEnd === 0) {
         // Comment:
+        // 如果是注释，如 <!-- -->
         if (comment.test(html)) {
           const commentEnd = html.indexOf('-->')
 
@@ -100,12 +102,13 @@ export function parseHTML (html, options) {
             if (options.shouldKeepComment) {
               options.comment(html.substring(4, commentEnd), index, index + commentEnd + 3)
             }
-            advance(commentEnd + 3)
+            advance(commentEnd + 3) // 同时会推进 index
             continue
           }
         }
 
         // http://en.wikipedia.org/wiki/Conditional_comment#Downlevel-revealed_conditional_comment
+        // 如果是条件注释节点，如 <![ ]>
         if (conditionalComment.test(html)) {
           const conditionalEnd = html.indexOf(']>')
 
@@ -116,6 +119,7 @@ export function parseHTML (html, options) {
         }
 
         // Doctype:
+        // 如果是 Doctype 节点，如 <!DOCTYPE >
         const doctypeMatch = html.match(doctype)
         if (doctypeMatch) {
           advance(doctypeMatch[0].length)
@@ -123,16 +127,18 @@ export function parseHTML (html, options) {
         }
 
         // End tag:
+        // 如果是结束标签 </XX>
         const endTagMatch = html.match(endTag)
         if (endTagMatch) {
           const curIndex = index
           advance(endTagMatch[0].length)
-          parseEndTag(endTagMatch[1], curIndex, index)
+          parseEndTag(endTagMatch[1], curIndex, index) // 处理结尾，让需要出栈的元素出栈。
           continue
         }
 
         // Start tag:
-        const startTagMatch = parseStartTag()
+        // 如果是开始标签 <XX>
+        const startTagMatch = parseStartTag() // 如果存在返回值则说明开始标签解析成功
         if (startTagMatch) {
           handleStartTag(startTagMatch)
           if (shouldIgnoreFirstNewline(startTagMatch.tagName, html)) {
@@ -142,9 +148,11 @@ export function parseHTML (html, options) {
         }
       }
 
+      // 如果 html 被处理成是 text</div>，这是会把 text 提取出来，当做字符串。
       let text, rest, next
       if (textEnd >= 0) {
         rest = html.slice(textEnd)
+        // 特殊情况：如果 html 是如 0<1<2 的内容，命中了下面的多重判断，则会把 <1<2 部分也切出来，当做是 text 返回
         while (
           !endTag.test(rest) &&
           !startTagOpen.test(rest) &&
@@ -160,6 +168,7 @@ export function parseHTML (html, options) {
         text = html.substring(0, textEnd)
       }
 
+      // 将整个 html 字符串作为文本处理就好了
       if (textEnd < 0) {
         text = html
       }
@@ -173,8 +182,10 @@ export function parseHTML (html, options) {
       }
     // 即将 parse 的内容是在纯文本标签里 (script,style,textarea)
     } else {
+      // 用来处理纯文本标签内的内容的，什么是纯文本标签呢？根据 isPlainTextElement 函数可知纯文本标签包括 script 标签、style 标签以及 textarea 标签。
       let endTagLength = 0
       const stackedTag = lastTag.toLowerCase()
+      // *?，其代表懒惰模式，也就是说只要第二个分组的内容匹配成功就立刻停止匹
       const reStackedTag = reCache[stackedTag] || (reCache[stackedTag] = new RegExp('([\\s\\S]*?)(</' + stackedTag + '[^>]*>)', 'i'))
       const rest = html.replace(reStackedTag, function (all, text, endTag) {
         endTagLength = endTag.length
@@ -200,6 +211,7 @@ export function parseHTML (html, options) {
     // 如果两者相等，则说明字符串 html 在经历循环体的代码之后没有任何改变，此时会把 html 字符串作为纯文本对待
     if (html === last) {
       options.chars && options.chars(html)
+      // 打印警告信息，提示你 html 字符串的结尾不符合标签格式，如 <div></div><a
       if (process.env.NODE_ENV !== 'production' && !stack.length && options.warn) {
         options.warn(`Mal-formatted tag at end of template: "${html}"`, { start: index + html.length })
       }
@@ -217,7 +229,7 @@ export function parseHTML (html, options) {
   }
   // parseStartTag 函数用来 parse 开始标签
   function parseStartTag () {
-    const start = html.match(startTagOpen)
+    const start = html.match(startTagOpen) // 如 <div></div>，start = ['<div', 'div']
     if (start) {
       const match = {
         tagName: start[1],
@@ -226,14 +238,17 @@ export function parseHTML (html, options) {
       }
       advance(start[0].length)
       let end, attr
+      // 没有匹配到开始标签的结束部分，并且匹配到了开始标签中的属性，这个时候循环体将被执行，直到遇到开始标签的结束部分为止。
+      // attr 会放入匹配后的属性
       while (!(end = html.match(startTagClose)) && (attr = html.match(dynamicArgAttribute) || html.match(attribute))) {
         attr.start = index
         advance(attr[0].length)
         attr.end = index
         match.attrs.push(attr)
       }
+      // 判断结束部分为 > 或者 />
       if (end) {
-        match.unarySlash = end[1]
+        match.unarySlash = end[1] // 如果 end[1] 不为 undefined，那么说明该标签是一个一元标签
         advance(end[0].length)
         match.end = index
         return match
@@ -256,6 +271,7 @@ export function parseHTML (html, options) {
 
     const unary = isUnaryTag(tagName) || !!unarySlash
 
+    // 规范 attrs 列表
     const l = match.attrs.length
     const attrs = new Array(l)
     for (let i = 0; i < l; i++) {
@@ -274,6 +290,7 @@ export function parseHTML (html, options) {
       }
     }
 
+    // 如果开始标签是非一元标签，则将该开始标签的信息入栈，即 push 到 stack 数组中，并将 lastTag 的值设置为该标签名
     if (!unary) {
       stack.push({ tag: tagName, lowerCasedTag: tagName.toLowerCase(), attrs: attrs, start: match.start, end: match.end })
       lastTag = tagName
@@ -284,6 +301,10 @@ export function parseHTML (html, options) {
     }
   }
   // parseEndTag 函数用来 parse 结束标签
+  // 三个作用：
+  // 检测是否缺少闭合标签（当三个参数都传递）
+  // 处理 stack 栈中剩余的标签（当只传递第一个参数）
+  // 解析 </br> 与 </p> 标签，与浏览器的行为相同（当不传递参数）
   function parseEndTag (tagName, start, end) {
     let pos, lowerCasedTagName
     if (start == null) start = index
@@ -299,12 +320,14 @@ export function parseHTML (html, options) {
       }
     } else {
       // If no tag name is provided, clean shop
+      // pos 变量会被用来判断是否有元素缺少闭合标签
       pos = 0
     }
 
     if (pos >= 0) {
       // Close all the open elements, up the stack
       for (let i = stack.length - 1; i >= pos; i--) {
+        // 如果没有在栈里找到匹配的元素，给友好提示
         if (process.env.NODE_ENV !== 'production' &&
           (i > pos || !tagName) &&
           options.warn
@@ -320,6 +343,7 @@ export function parseHTML (html, options) {
       }
 
       // Remove the open elements from the stack
+      // </br> </p>
       stack.length = pos
       lastTag = pos && stack[pos - 1].tag
     } else if (lowerCasedTagName === 'br') {

@@ -21,19 +21,19 @@ import {
   getAndRemoveAttrByRegex
 } from '../helpers'
 
-export const onRE = /^@|^v-on:/
-export const dirRE = process.env.VBIND_PROP_SHORTHAND
+export const onRE = /^@|^v-on:/ // 检测是否监听事件指令
+export const dirRE = process.env.VBIND_PROP_SHORTHAND // 检测标签属性名是否是指令
   ? /^v-|^@|^:|^\.|^#/
   : /^v-|^@|^:|^#/
-export const forAliasRE = /([\s\S]*?)\s+(?:in|of)\s+([\s\S]*)/
-export const forIteratorRE = /,([^,\}\]]*)(?:,([^,\}\]]*))?$/
-const stripParensRE = /^\(|\)$/g
-const dynamicArgRE = /^\[.*\]$/
+export const forAliasRE = /([\s\S]*?)\s+(?:in|of)\s+([\s\S]*)/ // 来匹配字符串 '(obj, index) of list'，并捕获到两个字符串 'obj' 和 'list'
+export const forIteratorRE = /,([^,\}\]]*)(?:,([^,\}\]]*))?$/ // 形如：`value, key, index`，会捕获到 key 和 index
+const stripParensRE = /^\(|\)$/g // 去掉字符串 '(obj, index)' 中的左右括号
+const dynamicArgRE = /^\[.*\]$/ // 用来匹配指令中的参数
 
 const argRE = /:(.*)$/
 export const bindRE = /^:|^\.|^v-bind:/
 const propBindRE = /^\./
-const modifierRE = /\.[^.\]]+(?=[^\]]*$)/g
+const modifierRE = /\.[^.\]]+(?=[^\]]*$)/g // 捕获 v-on:click.stop 中的 stop
 
 const slotRE = /^v-slot(:|$)|^#/
 
@@ -57,6 +57,7 @@ let platformMustUseProp
 let platformGetTagNamespace
 let maybeComponent
 
+// 元素的基本属性
 export function createASTElement (
   tag: string,
   attrs: Array<ASTAttr>,
@@ -78,6 +79,7 @@ export function createASTElement (
  */
 // parse 函数内部主要通过调用 parseHTML 函数对模板字符串进行解析
 // parseHTML 函数的作用就是用来做词法分析的，parse 函数的作用则是在词法分析的基础上做句法分析从而生成一棵 AST
+// 在词法分析阶段 Vue 会把字符串模板解析成一个个的令牌(token)，该令牌将用于句法分析阶段，在句法分析阶段会根据令牌生成一棵 AST，最后再根据该 AST 生成最终的渲染函数，这样就完成了代码的生成
 export function parse (
   template: string,
   options: CompilerOptions
@@ -138,9 +140,11 @@ export function parse (
       }
     }
     if (currentParent && !element.forbidden) {
+      // 如果有 elseif 或 else 属性，则不会作为父元素的子节点，而是会被添加到对应的 v-if 元素描述对象的 ifConditions 数组中
       if (element.elseif || element.else) {
         processIfConditions(element, currentParent)
       } else {
+        // 如果有 slot 属性，则不会作为父元素的子节点，
         if (element.slotScope) {
           // scoped slot
           // keep it in the children list so that v-else(-if) conditions can
@@ -205,6 +209,15 @@ export function parse (
 
   // 用来做词法分析
   // FIXME: 注意，这个 parseHTML 是没有返回值的！why？？
+  // 因为在传入的 start/end/chars/comment 方法，给 root 属性写处理。
+  /**
+   * 词法分析：把 <div :v-for="i in data"><a class="some-class" href="www.qq.com">test</a></div> 解析成一个 AST。
+   * 针对这些过程，设定了很多正则，来匹配对应的内容。
+   */
+  // 1、start 钩子函数，在解析 html 字符串时每次遇到 开始标签 时就会调用该函数
+  // 2、end 钩子函数，在解析 html 字符串时每次遇到 结束标签 时就会调用该函数
+  // 3、chars 钩子函数，在解析 html 字符串时每次遇到 纯文本 时就会调用该函数
+  // 4、comment 钩子函数，在解析 html 字符串时每次遇到 注释节点 时就会调用该函数
   parseHTML(template, {
     warn,
     expectHTML: options.expectHTML,
@@ -214,6 +227,7 @@ export function parse (
     shouldDecodeNewlinesForHref: options.shouldDecodeNewlinesForHref,
     shouldKeepComment: options.comments,
     outputSourceRange: options.outputSourceRange,
+    // 构建 AST 并建立父子级关系
     start (tag, attrs, unary, start, end) {
       // check namespace.
       // inherit parent ns if there is one
@@ -253,6 +267,7 @@ export function parse (
         })
       }
 
+      // isForbiddenTag：<style> 标签和 <script> 都被认为是禁止的标签
       if (isForbiddenTag(element) && !isServerRendering()) {
         element.forbidden = true
         process.env.NODE_ENV !== 'production' && warn(
@@ -264,10 +279,13 @@ export function parse (
       }
 
       // apply pre-transforms
+      // preTransforms 数组中的那些函数与 process* 系列函数唯一的区别就是平台化的区分
       for (let i = 0; i < preTransforms.length; i++) {
         element = preTransforms[i](element, options) || element
       }
 
+      // process* 系列函数
+      // 在对当前元素描述对象做额外的处理，使得该元素描述对象能更好的描述一个标签
       if (!inVPre) {
         processPre(element)
         if (element.pre) {
@@ -281,19 +299,21 @@ export function parse (
         processRawAttrs(element)
       } else if (!element.processed) {
         // structural directives
-        processFor(element)
-        processIf(element)
-        processOnce(element)
+        processFor(element) // 处理 v-for
+        processIf(element) // 处理 v-if/v-esle-if/v-else
+        processOnce(element) // 处理 v-once
       }
 
       if (!root) {
         root = element
         if (process.env.NODE_ENV !== 'production') {
+          // 用来检测模板根元素是否符合要求
           checkRootConstraints(root)
         }
       }
 
       if (!unary) {
+        // 每当遇到一个非一元标签都会将该元素的描述对象添加到 stack 数组，并且 currentParent 始终存储的是 stack 栈顶的元素，即当前解析元素的父级。
         currentParent = element
         stack.push(element)
       } else {
@@ -312,6 +332,7 @@ export function parse (
       closeElement(element)
     },
 
+    // 处理文本节点
     chars (text: string, start: number, end: number) {
       if (!currentParent) {
         if (process.env.NODE_ENV !== 'production') {
@@ -512,6 +533,15 @@ type ForParseResult = {
   iterator2?: string;
 };
 
+/**
+ * 处理字符串：(obj, key, index) in list
+ * 返回格式：{
+  for: 'list',
+  alias: 'obj',
+  iterator1: 'key',
+  iterator2: 'index'
+}
+ */
 export function parseFor (exp: string): ?ForParseResult {
   const inMatch = exp.match(forAliasRE)
   if (!inMatch) return
@@ -633,7 +663,7 @@ function processSlotContent (el) {
   // slot="xxx"
   const slotTarget = getBindingAttr(el, 'slot')
   if (slotTarget) {
-    el.slotTarget = slotTarget === '""' ? '"default"' : slotTarget
+    el.slotTarget = slotTarget === '""' ? '"default"' : slotTarget // 解决 <div slot></div>
     el.slotTargetDynamic = !!(el.attrsMap[':slot'] || el.attrsMap['v-bind:slot'])
     // preserve slot as an attribute for native shadow DOM compat
     // only for non-scoped slots.
@@ -749,6 +779,7 @@ function processSlotOutlet (el) {
   }
 }
 
+// 处理使用了is或inline-template属性的元素
 function processComponent (el) {
   let binding
   if ((binding = getBindingAttr(el, 'is'))) {
@@ -759,17 +790,18 @@ function processComponent (el) {
   }
 }
 
+// v-text、v-html、v-show、v-on、v-bind、v-model、v-cloak、自定义指令
 function processAttrs (el) {
   const list = el.attrsList
   let i, l, name, rawName, value, modifiers, syncGen, isDynamic
   for (i = 0, l = list.length; i < l; i++) {
     name = rawName = list[i].name
     value = list[i].value
-    if (dirRE.test(name)) {
+    if (dirRE.test(name)) { // v-bind、@、:、other-props
       // mark element as dynamic
       el.hasBindings = true
       // modifiers
-      modifiers = parseModifiers(name.replace(dirRE, ''))
+      modifiers = parseModifiers(name.replace(dirRE, '')) // 如 .sync
       // support .foo shorthand syntax for the .prop modifier
       if (process.env.VBIND_PROP_SHORTHAND && propBindRE.test(name)) {
         (modifiers || (modifiers = {})).prop = true
@@ -793,14 +825,15 @@ function processAttrs (el) {
           )
         }
         if (modifiers) {
-          if (modifiers.prop && !isDynamic) {
+          if (modifiers.prop && !isDynamic) { // .prop 修饰符
             name = camelize(name)
             if (name === 'innerHtml') name = 'innerHTML'
           }
-          if (modifiers.camel && !isDynamic) {
+          if (modifiers.camel && !isDynamic) { // .camel 修饰符
             name = camelize(name)
           }
-          if (modifiers.sync) {
+          // 对于使用了 .sync 修饰符的绑定属性，还会在元素描述对象的 el.events 对象中添加名字为 'update:${驼峰化的属性名}' 的事件
+          if (modifiers.sync) { // .sync 修饰符
             syncGen = genAssignmentCode(value, `$event`)
             if (!isDynamic) {
               addHandler(
@@ -870,6 +903,7 @@ function processAttrs (el) {
           checkForAliasModel(el, value)
         }
       }
+    // 非指令属性
     } else {
       // literal attribute
       if (process.env.NODE_ENV !== 'production') {

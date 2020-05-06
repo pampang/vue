@@ -24,12 +24,14 @@ import {
 } from 'compiler/parser/index'
 
 function preTransformNode (el: ASTElement, options: CompilerOptions) {
-  if (el.tag === 'input') {
+  if (el.tag === 'input') { // 对 input 做特殊处理
     const map = el.attrsMap
     if (!map['v-model']) {
       return
     }
 
+    // 处理情况：<input v-model="val" :type="inputType" />
+    // 我们要想方设法获取到绑定的 type 属性的值，如果获取不到则说明该 input 标签的类型是固定不变的，因为它是非绑定的。
     let typeBinding
     if (map[':type'] || map['v-bind:type']) {
       typeBinding = getBindingAttr(el, 'type')
